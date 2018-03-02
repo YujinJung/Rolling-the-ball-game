@@ -642,19 +642,19 @@ void rollingTheBall::UpdateObjectCBs(const GameTimer& gt)
 			float distance = getDistance(PlayerPos, mTargetPos);
 			if (distance < mTargetRadius[0])
 			{
-				e->Mat = mMaterials["bricks0"].get();
+				e->Mat = mMaterials["bricks3"].get();
 			}
 			else if (distance < mTargetRadius[1])
 			{
 				if (e->World.m[3][1] >= 1.1f)
-					e->Mat = mMaterials["bricks0"].get();
+					e->Mat = mMaterials["bricks3"].get();
 				else
 					e->Mat = mMaterials["stone0"].get();
 			}
 			else if (distance < mTargetRadius[2])
 			{
 				if (e->World.m[3][1] == 1.2f)
-					e->Mat = mMaterials["bricks0"].get();
+					e->Mat = mMaterials["bricks3"].get();
 				else
 					e->Mat = mMaterials["stone0"].get();
 			}
@@ -753,6 +753,13 @@ void rollingTheBall::LoadTextures()
 		mCommandList.Get(), bricksTex->Filename.c_str(),
 		bricksTex->Resource, bricksTex->UploadHeap));
 
+	auto bricks3Tex = std::make_unique<Texture>();
+	bricks3Tex->Name = "bricks3Tex";
+	bricks3Tex->Filename = L"../Textures/bricks3.dds";
+	ThrowIfFailed(DirectX::CreateDDSTextureFromFile12(md3dDevice.Get(),
+		mCommandList.Get(), bricks3Tex->Filename.c_str(),
+		bricks3Tex->Resource, bricks3Tex->UploadHeap));
+
 	auto stoneTex = std::make_unique<Texture>();
 	stoneTex->Name = "stoneTex";
 	stoneTex->Filename = L"../Textures/stone.dds";
@@ -776,6 +783,7 @@ void rollingTheBall::LoadTextures()
 		tileTex->Resource, tileTex->UploadHeap));
 
 	mTextures[bricksTex->Name] = std::move(bricksTex);
+	mTextures[bricks3Tex->Name] = std::move(bricks3Tex);
 	mTextures[stoneTex->Name] = std::move(stoneTex);
 	mTextures[grassTex->Name] = std::move(grassTex);
 	mTextures[tileTex->Name] = std::move(tileTex);
@@ -810,6 +818,7 @@ void rollingTheBall::BuildDescriptorHeaps()
 	CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor(mCbvHeap->GetCPUDescriptorHandleForHeapStart());
 
 	auto bricksTex = mTextures["bricksTex"]->Resource;
+	auto bricks3Tex = mTextures["bricks3Tex"]->Resource;
 	auto stoneTex = mTextures["stoneTex"]->Resource;
 	auto tileTex = mTextures["tileTex"]->Resource;
 	auto grassTex = mTextures["grassTex"]->Resource;
@@ -822,6 +831,12 @@ void rollingTheBall::BuildDescriptorHeaps()
 	srvDesc.Texture2D.MipLevels = bricksTex->GetDesc().MipLevels;
 	srvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
 	md3dDevice->CreateShaderResourceView(bricksTex.Get(), &srvDesc, hDescriptor);
+
+	hDescriptor.Offset(1, mCbvSrvDescriptorSize);
+
+	srvDesc.Format = bricks3Tex->GetDesc().Format;
+	srvDesc.Texture2D.MipLevels = bricks3Tex->GetDesc().MipLevels;
+	md3dDevice->CreateShaderResourceView(bricks3Tex.Get(), &srvDesc, hDescriptor);
 
 	hDescriptor.Offset(1, mCbvSrvDescriptorSize);
 
@@ -1255,26 +1270,34 @@ void rollingTheBall::BuildMaterials()
 	bricks0->FresnelR0 = XMFLOAT3(0.02f, 0.02f, 0.02f);
 	bricks0->Roughness = 0.1f;
 
+	auto bricks3 = std::make_unique<Material>();
+	bricks3->Name = "bricks3";
+	bricks3->MatCBIndex = 1;
+	bricks3->DiffuseSrvHeapIndex = 1;
+	bricks3->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+	bricks3->FresnelR0 = XMFLOAT3(0.02f, 0.02f, 0.02f);
+	bricks3->Roughness = 0.1f;
+
 	auto stone0 = std::make_unique<Material>();
 	stone0->Name = "stone0";
-	stone0->MatCBIndex = 1;
-	stone0->DiffuseSrvHeapIndex = 1;
+	stone0->MatCBIndex = 2;
+	stone0->DiffuseSrvHeapIndex = 2;
 	stone0->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	stone0->FresnelR0 = XMFLOAT3(0.05f, 0.05f, 0.05f);
 	stone0->Roughness = 0.3f;
 
 	auto tile0 = std::make_unique<Material>();
 	tile0->Name = "tile0";
-	tile0->MatCBIndex = 2;
-	tile0->DiffuseSrvHeapIndex = 2;
+	tile0->MatCBIndex = 3;
+	tile0->DiffuseSrvHeapIndex = 3;
 	tile0->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	tile0->FresnelR0 = XMFLOAT3(0.02f, 0.02f, 0.02f);
 	tile0->Roughness = 0.2f;
 
 	auto grass0 = std::make_unique<Material>();
 	grass0->Name = "grass0";
-	grass0->MatCBIndex = 3;
-	grass0->DiffuseSrvHeapIndex = 3;
+	grass0->MatCBIndex = 4;
+	grass0->DiffuseSrvHeapIndex = 4;
 	grass0->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	grass0->FresnelR0 = XMFLOAT3(0.05f, 0.02f, 0.02f);
 	grass0->Roughness = 0.1f;
@@ -1296,6 +1319,7 @@ void rollingTheBall::BuildMaterials()
 	carMat->Roughness = 0.3f;*/
 
 	mMaterials["bricks0"] = std::move(bricks0);
+	mMaterials["bricks3"] = std::move(bricks3);
 	mMaterials["stone0"] = std::move(stone0);
 	mMaterials["tile0"] = std::move(tile0);
 	mMaterials["grass0"] = std::move(grass0);
