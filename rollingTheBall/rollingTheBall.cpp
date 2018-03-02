@@ -118,8 +118,6 @@ private:
 	void BuildRootSignature();
 	void BuildShadersAndInputLayout();
 	void BuildShapeGeometry();
-	void BuildSkull();
-	void BuildCar();
 	void BuildMaterials();
 	void BuildPSOs();
 	void BuildFrameResources();
@@ -177,7 +175,7 @@ private:
 
 	PlayerInfo mPlayer;
 	const std::vector<float> mTargetRadius = { 3.0f, 8.0f, 11.0f };
-	const XMVECTOR mTargetPos = XMVectorSet(0.0f, 1.0f, 70.0f, 0.0f);
+	XMFLOAT3 mTargetPos = { 0.0f, 1.0f, 70.0f };
 	UINT mTargetIndexOffset = 0;
 
 	XMFLOAT3 mEyePos = { 0.0f, 30.0f, -30.0f };
@@ -463,13 +461,14 @@ void rollingTheBall::OnKeyboardInput(const GameTimer& gt)
 	else
 		mIsWireframe = false;
 
-	if (GetAsyncKeyState('w') || GetAsyncKeyState('W'))
+
+	if ((GetAsyncKeyState('w') || GetAsyncKeyState('W')) && mPlayerPos.z < mTargetPos.z - 20.0f)
 	{
 		mCameraTheta = 0.0f;
 		if (mPlayerVelocity < 0.01f)
 			mPlayerVelocity += 0.000001f;
 	}
-	else if (GetAsyncKeyState('s') || GetAsyncKeyState('S'))
+	else if ((GetAsyncKeyState('s') || GetAsyncKeyState('S')) && mPlayerPos.z < mTargetPos.z - 20.0f)
 	{
 		mCameraTheta = 0.0f;
 		if (mPlayerVelocity > -0.01f)
@@ -483,14 +482,14 @@ void rollingTheBall::OnKeyboardInput(const GameTimer& gt)
 			mPlayerVelocity += 0.0000005f;
 	}
 
-	if (GetAsyncKeyState('a') || GetAsyncKeyState('A'))
+	if ((GetAsyncKeyState('a') || GetAsyncKeyState('A')) && mPlayerPos.z < mTargetPos.z - 20.0f)
 	{
 		mPlayerYaw -= 0.0001f;
 
 		mPlayerTarget.x = mPlayerPos.x + mCameraRadius * sinf(mCameraPhi) * sinf(mPlayerYaw);
 		mPlayerTarget.z = mPlayerPos.z + mCameraRadius * sinf(mCameraPhi) * cosf(mPlayerYaw);
 	}
-	else if (GetAsyncKeyState('d') || GetAsyncKeyState('D'))
+	else if ((GetAsyncKeyState('d') || GetAsyncKeyState('D')) && mPlayerPos.z < mTargetPos.z - 20.0f)
 	{
 		mPlayerYaw += 0.0001f;
 
@@ -507,6 +506,10 @@ void rollingTheBall::OnKeyboardInput(const GameTimer& gt)
 
 		mPlayerVelocity = 0.0f;
 		mPlayerYaw = 0.0f;
+
+		srand(gt.TotalTime());
+		mTargetPos.x = (float)(rand() % 10);
+		mTargetPos.x -= 5.0f;
 	}
 
 	mPlayer.setPos(mPlayerPos);
@@ -639,7 +642,10 @@ void rollingTheBall::UpdateObjectCBs(const GameTimer& gt)
 	
 		if (e->ObjCBIndex >= mTargetIndexOffset)
 		{
-			float distance = getDistance(PlayerPos, mTargetPos);
+			float distance = getDistance(PlayerPos, XMVectorSet(mTargetPos.x, mTargetPos.y, mTargetPos.z, 1.0f));
+
+			world = XMLoadFloat4x4(&e->World) * XMMatrixTranslation(mTargetPos.x, 0.0f, 0.0f);
+
 			if (distance < mTargetRadius[0])
 			{
 				e->Mat = mMaterials["bricks3"].get();
@@ -1127,139 +1133,6 @@ void rollingTheBall::BuildShapeGeometry()
 	mGeometries[geo->Name] = std::move(geo);
 }
 
-void rollingTheBall::BuildCar()
-{
-	std::ifstream carText("Model/car.txt");
-
-	if (!carText)
-	{
-		MessageBox(0, L"car.txt not found", 0, 0);
-		return;
-	}
-
-	UINT vCount = 0;
-	UINT tCount = 0;
-	std::string ignore;
-
-	carText >> ignore >> vCount;
-	carText >> ignore >> tCount;
-	carText >> ignore >> ignore >> ignore >> ignore;
-
-	std::vector<Vertex> vertices(vCount);
-	for (UINT i = 0; i < vCount; ++i)
-	{
-		carText >> vertices[i].Pos.x >> vertices[i].Pos.y >> vertices[i].Pos.z;
-		carText >> vertices[i].Normal.x >> vertices[i].Normal.y >> vertices[i].Normal.z;
-	}
-
-	carText >> ignore >> ignore >> ignore;
-
-	std::vector<std::int32_t> indices(3 * tCount);
-	for (UINT i = 0; i < tCount; ++i)
-	{
-		carText >> indices[3 * i] >> indices[3 * i + 1] >> indices[3 * i + 2];
-	}
-
-	carText.close();
-
-	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
-	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::int32_t);
-
-	auto geo = std::make_unique<MeshGeometry>();
-	geo->Name = "carGeo";
-
-	ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
-	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
-
-	ThrowIfFailed(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
-	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
-
-	geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(), mCommandList.Get(), vertices.data(), vbByteSize, geo->VertexBufferUploader);
-	geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(), mCommandList.Get(), indices.data(), ibByteSize, geo->IndexBufferUploader);
-
-	geo->VertexByteStride = sizeof(Vertex);
-	geo->VertexBufferByteSize = vbByteSize;
-	geo->IndexFormat = DXGI_FORMAT_R32_UINT;
-	geo->IndexBufferByteSize = ibByteSize;
-
-	SubmeshGeometry carSubmesh;
-	carSubmesh.IndexCount = (UINT)indices.size();
-	carSubmesh.StartIndexLocation = 0;
-	carSubmesh.BaseVertexLocation = 0;
-
-	geo->DrawArgs["car"] = carSubmesh;
-
-	mGeometries[geo->Name] = std::move(geo);
-}
-
-void rollingTheBall::BuildSkull()
-{
-	std::ifstream skullText("Model/skull.txt");
-
-	if (!skullText)
-	{
-		MessageBox(0, L"skull.txt not found", 0, 0);
-		return;
-	}
-
-	UINT vCount = 0;
-	UINT tCount = 0;
-
-	std::string ignore;
-
-	skullText >> ignore >> vCount;
-	skullText >> ignore >> tCount;
-	skullText >> ignore >> ignore >> ignore >> ignore;
-
-	// pos 3 / normal 3
-	std::vector<Vertex> vertices(vCount);
-	for (UINT i = 0; i < vCount; ++i)
-	{
-		skullText >> vertices[i].Pos.x >> vertices[i].Pos.y >> vertices[i].Pos.z;
-		skullText >> vertices[i].Normal.x >> vertices[i].Normal.y >> vertices[i].Normal.z;
-
-	}
-
-	skullText >> ignore >> ignore >> ignore;
-
-	std::vector<std::int32_t> indices(3 * tCount);
-	for (UINT i = 0; i < tCount; ++i)
-	{
-		skullText >> indices[3 * i] >> indices[3 * i + 1] >> indices[3 * i + 2];
-	}
-
-	skullText.close();
-
-	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
-	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::int32_t);
-
-	auto geo = std::make_unique<MeshGeometry>();
-	geo->Name = "skullGeo";
-
-	ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
-	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
-
-	ThrowIfFailed(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
-	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
-
-	geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(), mCommandList.Get(), vertices.data(), vbByteSize, geo->VertexBufferUploader);
-	geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(), mCommandList.Get(), indices.data(), ibByteSize, geo->IndexBufferUploader);
-
-	geo->VertexByteStride = sizeof(Vertex);
-	geo->VertexBufferByteSize = vbByteSize;
-	geo->IndexFormat = DXGI_FORMAT_R32_UINT;
-	geo->IndexBufferByteSize = ibByteSize;
-
-	SubmeshGeometry skullSubmesh;
-	skullSubmesh.IndexCount = (UINT)indices.size();
-	skullSubmesh.StartIndexLocation = 0;
-	skullSubmesh.BaseVertexLocation = 0;
-
-	geo->DrawArgs["skull"] = skullSubmesh;
-
-	mGeometries[geo->Name] = std::move(geo);
-}
-
 void rollingTheBall::BuildMaterials()
 {
 	auto bricks0 = std::make_unique<Material>();
@@ -1388,18 +1261,6 @@ void rollingTheBall::BuildRenderItems()
 {
 	UINT objCBIndex = 0;
 
-	/*auto carRitem = std::make_unique<RenderItem>();
-	carRitem->World = MathHelper::Identity4x4();
-	carRitem->ObjCBIndex = objCBIndex++;
-	carRitem->Geo = mGeometries["carGeo"].get();
-	carRitem->Mat = mMaterials["carMat"].get();
-	carRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	carRitem->IndexCount = carRitem->Geo->DrawArgs["car"].IndexCount;
-	carRitem->StartIndexLocation = carRitem->Geo->DrawArgs["car"].StartIndexLocation;
-	carRitem->BaseVertexLocation = carRitem->Geo->DrawArgs["car"].BaseVertexLocation;
-	carRitem->radius = 2.0f;
-	mAllRitems.push_back(std::move(carRitem));*/
-
 	auto gridRitem = std::make_unique<RenderItem>();
 	XMStoreFloat4x4(&gridRitem->World, XMMatrixScaling(2.0f, 1.0f, 10.0f));
 	XMStoreFloat4x4(&gridRitem->TexTransform, XMMatrixScaling(8.0f, 80.0f, 1.0f));
@@ -1412,19 +1273,6 @@ void rollingTheBall::BuildRenderItems()
 	gridRitem->BaseVertexLocation = gridRitem->Geo->DrawArgs["grid"].BaseVertexLocation;
 	mAllRitems.push_back(std::move(gridRitem));
 
-	/*auto skullRitem = std::make_unique<RenderItem>();
-	XMStoreFloat4x4(&skullRitem->World, XMMatrixTranslation(0.0f, 2.0f, 15.0f));
-	skullRitem->ObjCBIndex = objCBIndex++;
-	skullRitem->Geo = mGeometries["skullGeo"].get();
-	skullRitem->Mat = mMaterials["skullMat"].get();
-	skullRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	skullRitem->IndexCount = skullRitem->Geo->DrawArgs["skull"].IndexCount;
-	skullRitem->StartIndexLocation = skullRitem->Geo->DrawArgs["skull"].StartIndexLocation;
-	skullRitem->BaseVertexLocation = skullRitem->Geo->DrawArgs["skull"].BaseVertexLocation;
-	skullRitem->originVector = { 0.0f, 2.0f, 15.0f };
-	skullRitem->radius = 1.0f;
-	mAllRitems.push_back(std::move(skullRitem));*/
-
 	auto sphereRitem = std::make_unique<RenderItem>();
 	XMStoreFloat4x4(&sphereRitem->World, XMMatrixScaling(4.0f, 4.0f, 4.0f)*XMMatrixTranslation(0.0f, 2.0f, 0.0f));
 	XMStoreFloat4x4(&sphereRitem->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
@@ -1436,6 +1284,18 @@ void rollingTheBall::BuildRenderItems()
 	sphereRitem->StartIndexLocation = sphereRitem->Geo->DrawArgs["sphere"].StartIndexLocation;
 	sphereRitem->BaseVertexLocation = sphereRitem->Geo->DrawArgs["sphere"].BaseVertexLocation;
 	mAllRitems.push_back(std::move(sphereRitem));
+
+	auto lineRitem = std::make_unique<RenderItem>();
+	XMStoreFloat4x4(&lineRitem->World, XMMatrixScaling(20.0f, 1.0f, 2.0f) * XMMatrixTranslation(0.0f, 0.0f, mTargetPos.z - 20.0f));
+	XMStoreFloat4x4(&lineRitem->TexTransform, XMMatrixScaling(1.0f, 1.0f, 1.0f));
+	lineRitem->ObjCBIndex = objCBIndex++;
+	lineRitem->Mat = mMaterials["stone0"].get();
+	lineRitem->Geo = mGeometries["shapeGeo"].get();
+	lineRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	lineRitem->IndexCount = lineRitem->Geo->DrawArgs["box"].IndexCount;
+	lineRitem->StartIndexLocation = lineRitem->Geo->DrawArgs["box"].StartIndexLocation;
+	lineRitem->BaseVertexLocation = lineRitem->Geo->DrawArgs["box"].BaseVertexLocation;
+	mAllRitems.push_back(std::move(lineRitem));
 
 	XMMATRIX brickTexTransform = XMMatrixScaling(1.0f, 1.0f, 1.0f);
 	for (int i = 0; i < 15; ++i)
@@ -1556,9 +1416,9 @@ void rollingTheBall::BuildRenderItems()
 		auto circle3Item = std::make_unique<RenderItem>();
 
 		float theta = XM_2PI / 12 * i;
-		XMMATRIX circle1 = XMMatrixTranslation(mTargetRadius[0] * cosf(theta), 1.0f, 70.0f + mTargetRadius[0] * sinf(theta));
-		XMMATRIX circle2 = XMMatrixTranslation(mTargetRadius[1] * cosf(theta), 1.1f, 70.0f + mTargetRadius[1] * sinf(theta));
-		XMMATRIX circle3 = XMMatrixTranslation(mTargetRadius[2] * cosf(theta), 1.2f, 70.0f + mTargetRadius[2] * sinf(theta));
+		XMMATRIX circle1 = XMMatrixTranslation(mTargetPos.x + mTargetRadius[0] * cosf(theta), 1.0f, mTargetPos.z + mTargetRadius[0] * sinf(theta));
+		XMMATRIX circle2 = XMMatrixTranslation(mTargetPos.x + mTargetRadius[1] * cosf(theta), 1.1f, mTargetPos.z + mTargetRadius[1] * sinf(theta));
+		XMMATRIX circle3 = XMMatrixTranslation(mTargetPos.x + mTargetRadius[2] * cosf(theta), 1.2f, mTargetPos.z + mTargetRadius[2] * sinf(theta));
 
 		XMStoreFloat4x4(&circle1Item->World, circle1);
 		circle1Item->TexTransform = MathHelper::Identity4x4();
