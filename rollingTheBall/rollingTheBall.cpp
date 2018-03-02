@@ -24,6 +24,33 @@ struct CollisionSphere
 	float radius = 0.0f;
 };
 
+class PlayerInfo
+{
+private:
+	XMFLOAT3 mPos;
+	XMFLOAT3 mTarget;
+	float mYaw;
+	float mRadius;
+	float mPlayerVelocity;
+	UINT score;
+
+public:
+	PlayerInfo() : mPos(0.0f, 2.0f, 0.0f), mTarget(0.0f, 2.0f, 15.0f), mRadius(2.0f), mPlayerVelocity(0.0f), mYaw(0.0f)
+	{  }
+
+	XMFLOAT3 getPos() const { return mPos; }
+	XMFLOAT3 getTarget() const { return mTarget; }
+	float getYaw() const { return mYaw; }
+	float getRadius() const { return mRadius; }
+	float getVelocity() const { return mPlayerVelocity; }
+
+	void setPos(const XMFLOAT3& pos) { mPos = pos; }
+	void setTarget(const XMFLOAT3& target) { mTarget = target; }
+	void setYaw(const float& yaw) { mYaw = yaw; }
+	void setRadius(const float& radius) { mRadius = radius; }
+	void setVelocity(const float& velocity) { mPlayerVelocity = velocity; }
+};
+
 // Lightweight structure stores parameters to draw a shape.  This will
 // vary from app-to-app.
 struct RenderItem
@@ -144,24 +171,25 @@ private:
 	* mouse left click - EyeTarget Move
 	* mouse right click - EyeTarget, playerTarget(x, z)(Yaw) Move
 	*/
-	float mRadius = 15.0f;
-	float mYaw = 0.0f;
-	float mCamPhi = XM_PIDIV2;
-	float mCamTheta;
+	const float mCameraRadius = 15.0f;
+	float mCameraPhi = XM_PIDIV2;
+	float mCameraTheta = 0.0f;
 
-	float mCarVelocity = 0.0f;
-	float mPlayerRadius = 2.0f;
+	PlayerInfo mPlayer;
+	const std::vector<float> mTargetRadius = { 3.0f, 8.0f, 11.0f };
+	const XMVECTOR mTargetPos = XMVectorSet(0.0f, 1.0f, 70.0f, 0.0f);
+	UINT mTargetIndexOffset = 0;
 
-	XMFLOAT3 mPlayerPos = { 0.0f, 2.0f, 0.0f };
 	XMFLOAT3 mEyePos = { 0.0f, 30.0f, -30.0f };
-	XMFLOAT3 mPlayerTarget = { 0.0f, 2.0f, 15.0f };
-	XMFLOAT3 mEyeTarget = mPlayerPos;
+	XMFLOAT3 mEyeTarget = mPlayer.getPos();
+	XMFLOAT3 mEyePosCalc = { mCameraRadius * 2 * sinf(XM_PI / 3.0f), mCameraRadius * 2 * cosf(XM_PI / 3.0f), mCameraRadius * 2 * sinf(XM_PI / 3.0f) };
+
 	XMFLOAT4X4 mView = MathHelper::Identity4x4();
 	XMFLOAT4X4 mProj = MathHelper::Identity4x4();
-	XMFLOAT3 mEyePosCalc = { mRadius * 2 * sinf(XM_PI / 3.0f), mRadius * 2 * cosf(XM_PI / 3.0f), mRadius * 2 * sinf(XM_PI / 3.0f) };
 
 	POINT mLastMousePos;
 };
+
 
 //-------------------------------------------------------------------------------------------------------------------------------
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
@@ -361,53 +389,58 @@ void rollingTheBall::OnMouseMove(WPARAM btnState, int x, int y)
 {
 	XMVECTOR eyePos = XMVectorSet(mEyePos.x, mEyePos.y, mEyePos.z, 1.0f);
 	XMVECTOR eyeTarget = XMVectorSet(mEyeTarget.x, mEyeTarget.y, mEyeTarget.z, 0.0f);
+	XMVECTOR EyePosCalc = XMVectorSet(mEyePosCalc.x, mEyePosCalc.y, mEyePosCalc.z, 1.0f);
 
-	float dx, dy;
+	XMFLOAT3 mPlayerTarget = mPlayer.getTarget();
+	XMFLOAT3 mPlayerPos = mPlayer.getPos();
+	float mPlayerYaw = mPlayer.getYaw();
+	float mPlayerVelocity = mPlayer.getVelocity();
 
 	if ((btnState & MK_LBUTTON) != 0)
 	{
-		dx = XMConvertToRadians(0.5f*static_cast<float>(x - mLastMousePos.x));
-		dy = XMConvertToRadians(0.5f*static_cast<float>(y - mLastMousePos.y));
+		float dx = XMConvertToRadians(0.5f*static_cast<float>(x - mLastMousePos.x));
+		float dy = XMConvertToRadians(0.5f*static_cast<float>(y - mLastMousePos.y));
 
 		// Update angles based on input to orbit camera around box.
-		mCamTheta += dx;
-		mCamPhi += dy;
-		mCamPhi = MathHelper::Clamp(mCamPhi, 0.1f, MathHelper::Pi - 0.1f);
+		mCameraTheta += dx;
+		mCameraPhi += dy;
+		mCameraPhi = MathHelper::Clamp(mCameraPhi, 0.1f, MathHelper::Pi - 0.1f);
 
-		mEyeTarget.x = mEyePos.x + 2 * mRadius * sinf(mCamPhi) * sinf(mYaw + mCamTheta);
-		mEyeTarget.z = mEyePos.z + 2 * mRadius * sinf(mCamPhi) * cosf(mYaw + mCamTheta);
-		mEyeTarget.y = mEyePos.y + 2 * mRadius * cosf(mCamPhi);
+		mEyeTarget.x = mEyePos.x + 2 * mCameraRadius * sinf(mCameraPhi) * sinf(mPlayerYaw + mCameraTheta);
+		mEyeTarget.z = mEyePos.z + 2 * mCameraRadius * sinf(mCameraPhi) * cosf(mPlayerYaw + mCameraTheta);
+		mEyeTarget.y = mEyePos.y + 2 * mCameraRadius * cosf(mCameraPhi);
 	}
 	else if ((btnState & MK_RBUTTON) != 0)
 	{
-		XMVECTOR EyePosCalc = XMVectorSet(mEyePosCalc.x, mEyePosCalc.y, mEyePosCalc.z, 1.0f);
 		XMVECTOR playerPos = XMVectorSet(mPlayerPos.x, mPlayerPos.y, mPlayerPos.z, 1.0f);
-		mCamTheta = 0.0f;
+		mCameraTheta = 0.0f;
 
-		dx = XMConvertToRadians(0.5f*static_cast<float>(x - mLastMousePos.x));
-		dy = XMConvertToRadians(0.5f*static_cast<float>(y - mLastMousePos.y));
+		float dx = XMConvertToRadians(0.5f*static_cast<float>(x - mLastMousePos.x));
+		float dy = XMConvertToRadians(0.5f*static_cast<float>(y - mLastMousePos.y));
 
 		// Update angles based on input to orbit camera around box.
-		mYaw += dx;
-		mCamPhi += dy;
-		mCamPhi = MathHelper::Clamp(mCamPhi, 0.1f, MathHelper::Pi - 0.1f);
+		mPlayerYaw += dx;
+		mCameraPhi += dy;
+		mCameraPhi = MathHelper::Clamp(mCameraPhi, 0.1f, MathHelper::Pi - 0.1f);
 
-		XMVECTOR EyePos = XMVectorSet(sinf(mYaw + XM_PI), 1.0f, cosf(mYaw + XM_PI), 1.0f);
+		XMVECTOR EyePos = XMVectorSet(sinf(mPlayerYaw + XM_PI), 1.0f, cosf(mPlayerYaw + XM_PI), 1.0f);
 		eyePos = XMVectorMultiplyAdd(EyePosCalc, EyePos, playerPos);
 		XMStoreFloat3(&mEyePos, eyePos);
 
-		mEyeTarget.x = mEyePos.x + 2 * mRadius * sinf(mCamPhi) * sinf(mYaw);
-		mEyeTarget.z = mEyePos.z + 2 * mRadius * sinf(mCamPhi) * cosf(mYaw);
-		mEyeTarget.y = mEyePos.y + 2 * mRadius * cosf(mCamPhi);
-
-		mPlayerTarget.x = mPlayerPos.x + mRadius * sinf(mCamPhi) * sinf(mYaw);
-		mPlayerTarget.z = mPlayerPos.z + mRadius * sinf(mCamPhi) * cosf(mYaw);
+		mPlayerTarget.x = mPlayerPos.x + mCameraRadius * sinf(mCameraPhi) * sinf(mPlayerYaw);
+		mPlayerTarget.z = mPlayerPos.z + mCameraRadius * sinf(mCameraPhi) * cosf(mPlayerYaw);
 	}
+
+	mPlayer.setPos(mPlayerPos);
+	mPlayer.setTarget(mPlayerTarget);
+	mPlayer.setYaw(mPlayerYaw);
+	mPlayer.setVelocity(mPlayerVelocity);
+
 	mLastMousePos.x = x;
 	mLastMousePos.y = y;
 }
 
-float distance(const FXMVECTOR& v1, const FXMVECTOR& v2)
+float getDistance(const FXMVECTOR& v1, const FXMVECTOR& v2)
 {
 	XMVECTOR vectorSub = XMVectorSubtract(v1, v2);
 	XMVECTOR length = XMVector3Length(vectorSub);
@@ -420,45 +453,49 @@ float distance(const FXMVECTOR& v1, const FXMVECTOR& v2)
 //-------------------------------------------------------------------------------------------------------------------------------
 void rollingTheBall::OnKeyboardInput(const GameTimer& gt)
 {
+	XMFLOAT3 mPlayerTarget = mPlayer.getTarget();
+	XMFLOAT3 mPlayerPos = mPlayer.getPos();
+	float mPlayerYaw = mPlayer.getYaw();
+	float mPlayerVelocity = mPlayer.getVelocity();
+
 	if (GetAsyncKeyState('1') & 0x8000)
 		mIsWireframe = true;
 	else
 		mIsWireframe = false;
 
-	mCamTheta = 0.0f;
-
 	if (GetAsyncKeyState('w') || GetAsyncKeyState('W'))
 	{
-		if (mCarVelocity < 0.01f)
-			mCarVelocity += 0.000001f;
+		mCameraTheta = 0.0f;
+		if (mPlayerVelocity < 0.01f)
+			mPlayerVelocity += 0.000001f;
 	}
 	else if (GetAsyncKeyState('s') || GetAsyncKeyState('S'))
 	{
-		if (mCarVelocity > -0.01f)
-			mCarVelocity -= 0.000001f;
+		mCameraTheta = 0.0f;
+		if (mPlayerVelocity > -0.01f)
+			mPlayerVelocity -= 0.000001f;
 	}
 	else
 	{
-		if (mCarVelocity > 0.0f)
-			mCarVelocity -= 0.0000005f;
-		if (mCarVelocity < 0.0f)
-			mCarVelocity += 0.0000005f;
+		if (mPlayerVelocity > 0.0f)
+			mPlayerVelocity -= 0.0000005f;
+		if (mPlayerVelocity < 0.0f)
+			mPlayerVelocity += 0.0000005f;
 	}
 
 	if (GetAsyncKeyState('a') || GetAsyncKeyState('A'))
 	{
-		mYaw -= 0.0001f;
+		mPlayerYaw -= 0.0001f;
 
-
-		mPlayerTarget.x = mPlayerPos.x + mRadius * sinf(mCamPhi) * sinf(mYaw);
-		mPlayerTarget.z = mPlayerPos.z + mRadius * sinf(mCamPhi) * cosf(mYaw);
+		mPlayerTarget.x = mPlayerPos.x + mCameraRadius * sinf(mCameraPhi) * sinf(mPlayerYaw);
+		mPlayerTarget.z = mPlayerPos.z + mCameraRadius * sinf(mCameraPhi) * cosf(mPlayerYaw);
 	}
 	else if (GetAsyncKeyState('d') || GetAsyncKeyState('D'))
 	{
-		mYaw += 0.0001f;
+		mPlayerYaw += 0.0001f;
 
-		mPlayerTarget.x = mPlayerPos.x + mRadius * sinf(mCamPhi) * sinf(mYaw);
-		mPlayerTarget.z = mPlayerPos.z + mRadius * sinf(mCamPhi) * cosf(mYaw);
+		mPlayerTarget.x = mPlayerPos.x + mCameraRadius * sinf(mCameraPhi) * sinf(mPlayerYaw);
+		mPlayerTarget.z = mPlayerPos.z + mCameraRadius * sinf(mCameraPhi) * cosf(mPlayerYaw);
 	}
 
 	if (GetAsyncKeyState('r') || GetAsyncKeyState('R'))
@@ -467,55 +504,74 @@ void rollingTheBall::OnKeyboardInput(const GameTimer& gt)
 		mEyePos = { 0.0f, 30.0f, -30.0f };
 		mPlayerTarget = { 0.0f, 2.0f, 15.0f };
 		mEyeTarget = mPlayerPos;
-		
-		mCarVelocity = 0.0f;
-		mYaw = 0.0f;
+
+		mPlayerVelocity = 0.0f;
+		mPlayerYaw = 0.0f;
 	}
+
+	mPlayer.setPos(mPlayerPos);
+	mPlayer.setTarget(mPlayerTarget);
+	mPlayer.setYaw(mPlayerYaw);
+	mPlayer.setVelocity(mPlayerVelocity);
 }
 
 void rollingTheBall::UpdatePlayerPosition(const GameTimer& gt)
 {
+	XMFLOAT3 mPlayerTarget = mPlayer.getTarget();
+	XMFLOAT3 mPlayerPos = mPlayer.getPos();
+	float mPlayerYaw = mPlayer.getYaw();
+	float mPlayerVelocity = mPlayer.getVelocity();
+	static float prePlayerVelocity = mPlayerVelocity;
+	float mPlayerRadius = mPlayer.getRadius();
+	
 	XMVECTOR EyePos = XMVectorSet(mEyePos.x, mEyePos.y, mEyePos.z, 1.0f);
 	XMVECTOR PlayerPos = XMVectorSet(mPlayerPos.x, mPlayerPos.y, mPlayerPos.z, 1.0f);
 	XMVECTOR PlayerTarget = XMVectorSet(mPlayerTarget.x, mPlayerTarget.y, mPlayerTarget.z, 0.0f);
 	XMVECTOR EyePosCalc = XMVectorSet(mEyePosCalc.x, mEyePosCalc.y, mEyePosCalc.z, 1.0f);
 	XMVECTOR PlayerDirection = XMVector3Normalize(XMVectorSubtract(PlayerTarget, PlayerPos));
 
-	bool stop = false;
-
 	for (auto& e : mCollisionRitems)
 	{
 		XMVECTOR ObjPos = XMVectorSet(e->originVector.x, e->originVector.y, e->originVector.z, 1.0f);
 
-		if (distance(PlayerPos, ObjPos) <= e->radius + mPlayerRadius )
+		if (getDistance(PlayerPos, ObjPos) <= e->radius + mPlayerRadius)
 		{
 			XMVECTOR ObjDirection = XMVector3Normalize(XMVectorSubtract(ObjPos, PlayerPos));
 
-			PlayerPos = XMVectorSubtract(PlayerPos, mCarVelocity*ObjDirection*10.0f);
-			PlayerTarget = XMVectorSubtract(PlayerTarget, mCarVelocity*ObjDirection*10.0f);
+			PlayerPos = XMVectorSubtract(PlayerPos, 0.1f * ObjDirection);
+			PlayerTarget = XMVectorSubtract(PlayerTarget, 0.1f * ObjDirection);
+
+			mPlayerVelocity *= 0.9f;
 
 			break;
 		}
-		
 	}
 
-	PlayerPos = XMVectorAdd(PlayerPos, mCarVelocity*PlayerDirection);
-	PlayerTarget = XMVectorAdd(PlayerTarget, mCarVelocity*PlayerDirection);
+	if (mPlayerVelocity != prePlayerVelocity)
+	{
+		PlayerPos = XMVectorAdd(PlayerPos, mPlayerVelocity*PlayerDirection);
+		PlayerTarget = XMVectorAdd(PlayerTarget, mPlayerVelocity*PlayerDirection);
+		XMStoreFloat3(&mEyeTarget, PlayerPos);
 
-	XMVECTOR EyePosOne = XMVectorSet(sinf(mYaw + XM_PI), 1.0f, cosf(mYaw + XM_PI), 1.0f);
+		// 3 8 13
+		prePlayerVelocity = mPlayerVelocity;
+	}
+
+	XMVECTOR EyePosOne = XMVectorSet(sinf(mPlayerYaw + XM_PI), 1.0f, cosf(mPlayerYaw + XM_PI), 1.0f);
 	EyePos = XMVectorMultiplyAdd(EyePosCalc, EyePosOne, PlayerPos);
 
 	XMStoreFloat3(&mEyePos, EyePos);
-	XMStoreFloat3(&mEyeTarget, PlayerPos);
 	XMStoreFloat3(&mPlayerPos, PlayerPos);
 	XMStoreFloat3(&mPlayerTarget, PlayerTarget);
+
+	mPlayer.setPos(mPlayerPos);
+	mPlayer.setTarget(mPlayerTarget);
+	mPlayer.setVelocity(mPlayerVelocity);
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------
 void rollingTheBall::UpdateCamera(const GameTimer& gt)
 {
-	// Convert Spherical to Cartesian coordinates.
-
 	// Build the view matrix.
 	XMVECTOR pos = XMVectorSet(mEyePos.x, mEyePos.y, mEyePos.z, 1.0f);
 	XMVECTOR target = XMVectorSet(mEyeTarget.x, mEyeTarget.y, mEyeTarget.z, 0.0f);
@@ -528,7 +584,13 @@ void rollingTheBall::UpdateCamera(const GameTimer& gt)
 //-------------------------------------------------------------------------------------------------------------------------------
 void rollingTheBall::UpdateObjectCBs(const GameTimer& gt)
 {
+	XMVECTOR PlayerPos = XMLoadFloat3(&mPlayer.getPos());
+	XMVECTOR PlayerTarget = XMLoadFloat3(&mPlayer.getTarget());
+	float mYaw = mPlayer.getYaw();
+	float mPlayerVelocity = mPlayer.getVelocity();
+
 	auto currObjectCB = mCurrFrameResource->ObjectCB.get();
+	
 	for (auto& e : mAllRitems)
 	{
 		XMMATRIX world = XMLoadFloat4x4(&e->World);
@@ -536,35 +598,72 @@ void rollingTheBall::UpdateObjectCBs(const GameTimer& gt)
 
 		if (e->ObjCBIndex == 1)
 		{
-			static float dx = 0.0f, dz = 0.0f;
+			static float rAxis = 0.0f;
+			static XMVECTOR prePlayerPosition = PlayerPos;
+			float dx = 0.0f, dz = 0.0f;
 
-			XMFLOAT2 PlayerDirection(mPlayerTarget.x - mPlayerPos.x, mPlayerTarget.z - mPlayerPos.z);
-			if (PlayerDirection.x < 0.0f)
-				PlayerDirection.x *= -1.0f;
-			if (PlayerDirection.y < 0.0f)
-				PlayerDirection.y *= -1.0f;
+			if (mYaw > XM_PI)
+				mYaw -= XM_2PI;
+			else if (mYaw < -XM_PI)
+				mYaw += XM_2PI;
 
-			dx += mCarVelocity * PlayerDirection.x * 0.05f;
-			dz += mCarVelocity * PlayerDirection.y * 0.05f;
-			
-			if (dx > XM_2PI)
-				dx -= XM_2PI;
-			else if (dx < -XM_2PI)
-				dx += XM_2PI;
+			dx = PlayerPos.m128_f32[0] - prePlayerPosition.m128_f32[0];
+			dz = PlayerPos.m128_f32[2] - prePlayerPosition.m128_f32[2];
 
-			if (dz > XM_2PI)
-				dz -= XM_2PI;
-			else if (dz < -XM_2PI)
-				dz += XM_2PI;
+			//if ((mYaw > XM_PI) || (mYaw > -1.0f * XM_PI && mYaw < 0.0f))
+			if (mYaw < 0.0f)
+			{
+				dx *= -1.0f;
+			}
+			if (mYaw < -1.0f * XM_PIDIV2 || mYaw > XM_PIDIV2)
+			{
+				dz *= -1.0f;
+			}
 
-			world = XMMatrixScaling(4.0f, 4.0f, 4.0f) * XMMatrixRotationRollPitchYaw(-1.0f* dz, mYaw + XM_PI, dx) * XMMatrixTranslation(mPlayerPos.x, mPlayerPos.y, mPlayerPos.z);
+			//rAxis += getDistance(PlayerPos, prePlayerPosition);
+			rAxis += dx + dz;
+
+			prePlayerPosition = PlayerPos;
+
+			if (rAxis> XM_PI)
+				rAxis -= XM_2PI;
+			else if (rAxis < -XM_PI)
+				rAxis += XM_2PI;
+			world = XMMatrixScaling(4.0f, 4.0f, 4.0f) * XMMatrixRotationX(rAxis) * XMMatrixRotationY(mYaw) * XMMatrixTranslationFromVector(PlayerPos);
 		}
 
 		if (attackMonster && e->ObjCBIndex == 2)
 		{
 			world = XMMatrixScaling(2.0f, 2.0f, 2.0f)* XMMatrixRotationRollPitchYaw(0.0f, mYaw + XM_PI, 0.0f) * XMMatrixTranslation(0.0f, 2.0f, 15.0f);
 		}
-
+	
+		if (e->ObjCBIndex >= mTargetIndexOffset)
+		{
+			float distance = getDistance(PlayerPos, mTargetPos);
+			if (distance < mTargetRadius[0])
+			{
+				e->Mat = mMaterials["bricks0"].get();
+			}
+			else if (distance < mTargetRadius[1])
+			{
+				if (e->World.m[3][1] >= 1.1f)
+					e->Mat = mMaterials["bricks0"].get();
+				else
+					e->Mat = mMaterials["stone0"].get();
+			}
+			else if (distance < mTargetRadius[2])
+			{
+				if (e->World.m[3][1] == 1.2f)
+					e->Mat = mMaterials["bricks0"].get();
+				else
+					e->Mat = mMaterials["stone0"].get();
+			}
+			else
+			{
+					e->Mat = mMaterials["stone0"].get();
+			}
+			
+		}
 		ObjectConstants objConstants;
 		XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
 		XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
@@ -576,7 +675,7 @@ void rollingTheBall::UpdateObjectCBs(const GameTimer& gt)
 		if (e->NumFramesDirty > 0)
 		{
 			XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
-		XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
+			XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
 
 			currObjectCB->CopyData(e->ObjCBIndex, objConstants);
 
@@ -844,11 +943,11 @@ void rollingTheBall::BuildRootSignature()
 	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable[0]);
 	slotRootParameter[2].InitAsDescriptorTable(1, &cbvTable[1]);
 	slotRootParameter[3].InitAsDescriptorTable(1, &cbvTable[2]);
-	
+
 	auto staticSamplers = GetStaticSamplers();
 
 	// A root signature is an array of root parameters.
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter, 
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(4, slotRootParameter,
 		(UINT)staticSamplers.size(), staticSamplers.data(),
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
@@ -1205,7 +1304,6 @@ void rollingTheBall::BuildMaterials()
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------
-
 void rollingTheBall::BuildPSOs()
 {
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC opaquePsoDesc;
@@ -1332,7 +1430,6 @@ void rollingTheBall::BuildRenderItems()
 		XMMATRIX leftSphereWorld = XMMatrixTranslation(-15.0f, 3.5f, 20.0f + i * 5.0f);
 		XMMATRIX rightSphereWorld = XMMatrixTranslation(+15.0f, 3.5f, 20.0f + i * 5.0f);
 
-
 		XMStoreFloat4x4(&leftCylRitem->World, rightCylWorld);
 		XMStoreFloat4x4(&leftCylRitem->TexTransform, brickTexTransform);
 		leftCylRitem->ObjCBIndex = objCBIndex++;
@@ -1343,7 +1440,7 @@ void rollingTheBall::BuildRenderItems()
 		leftCylRitem->StartIndexLocation = leftCylRitem->Geo->DrawArgs["cylinder"].StartIndexLocation;
 		leftCylRitem->BaseVertexLocation = leftCylRitem->Geo->DrawArgs["cylinder"].BaseVertexLocation;
 
-		leftColSphere->radius = 1.0f;
+		leftColSphere->radius = 1.5f;
 		leftColSphere->originVector = { -15.0f, 2.0f, 20.0f + i * 5.0f };
 
 		XMStoreFloat4x4(&rightCylRitem->World, leftCylWorld);
@@ -1356,7 +1453,7 @@ void rollingTheBall::BuildRenderItems()
 		rightCylRitem->StartIndexLocation = rightCylRitem->Geo->DrawArgs["cylinder"].StartIndexLocation;
 		rightCylRitem->BaseVertexLocation = rightCylRitem->Geo->DrawArgs["cylinder"].BaseVertexLocation;
 
-		rightColSphere->radius = 1.0f;
+		rightColSphere->radius = 1.5f;
 		rightColSphere->originVector = { +15.0f, 2.0f, 20.0f + i * 5.0f };
 
 		XMStoreFloat4x4(&leftSphereRitem->World, leftSphereWorld);
@@ -1418,7 +1515,7 @@ void rollingTheBall::BuildRenderItems()
 		backSphereRItem->StartIndexLocation = backSphereRItem->Geo->DrawArgs["sphere"].StartIndexLocation;
 		backSphereRItem->BaseVertexLocation = backSphereRItem->Geo->DrawArgs["sphere"].BaseVertexLocation;
 
-		ColSphere->radius = 1.0f;
+		ColSphere->radius = 1.5f;
 		ColSphere->originVector = { -15.0f + i * 5.0f, 2.0f, 95.0f };
 
 		mAllRitems.push_back(std::move(backCylRItem));
@@ -1427,7 +1524,7 @@ void rollingTheBall::BuildRenderItems()
 		mCollisionRitems.push_back(std::move(ColSphere));
 	}
 
-
+	mTargetIndexOffset = objCBIndex;
 	for (int i = 0; i < 12; ++i)
 	{
 		auto circle1Item = std::make_unique<RenderItem>();
@@ -1435,9 +1532,9 @@ void rollingTheBall::BuildRenderItems()
 		auto circle3Item = std::make_unique<RenderItem>();
 
 		float theta = XM_2PI / 12 * i;
-		XMMATRIX circle1 = XMMatrixTranslation(13.0f * cosf(theta), 1.0f, 70.0f + 13.0f*sinf(theta));
-		XMMATRIX circle2 = XMMatrixTranslation(8.0f * cosf(theta), 1.0f, 70.0f + 8.0f*sinf(theta));
-		XMMATRIX circle3 = XMMatrixTranslation(3.0f * cosf(theta), 1.0f, 70.0f + 3.0f*sinf(theta));
+		XMMATRIX circle1 = XMMatrixTranslation(mTargetRadius[0] * cosf(theta), 1.0f, 70.0f + mTargetRadius[0] * sinf(theta));
+		XMMATRIX circle2 = XMMatrixTranslation(mTargetRadius[1] * cosf(theta), 1.1f, 70.0f + mTargetRadius[1] * sinf(theta));
+		XMMATRIX circle3 = XMMatrixTranslation(mTargetRadius[2] * cosf(theta), 1.2f, 70.0f + mTargetRadius[2] * sinf(theta));
 
 		XMStoreFloat4x4(&circle1Item->World, circle1);
 		circle1Item->TexTransform = MathHelper::Identity4x4();
@@ -1485,8 +1582,8 @@ void rollingTheBall::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const s
 	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 	UINT matCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(MaterialConstants));
 
-	auto objectCB = mCurrFrameResource->ObjectCB->Resource();
-	auto matCB = mCurrFrameResource->MaterialCB->Resource();
+	/*auto objectCB = mCurrFrameResource->ObjectCB->Resource();
+	auto matCB = mCurrFrameResource->MaterialCB->Resource();*/
 
 	// For each render item...
 	for (size_t i = 0; i < ritems.size(); ++i)
