@@ -92,6 +92,8 @@ public:
     static DirectX::XMVECTOR RandUnitVec3();
     static DirectX::XMVECTOR RandHemisphereUnitVec3(DirectX::XMVECTOR n);
 
+	static float getDistance(const DirectX::FXMVECTOR &v1, const DirectX::FXMVECTOR &v2);
+
 	static const float Infinity;
 	static const float Pi;
 

@@ -80,3 +80,13 @@ XMVECTOR MathHelper::RandHemisphereUnitVec3(XMVECTOR n)
 		return XMVector3Normalize(v);
 	}
 }
+
+float MathHelper::getDistance(const FXMVECTOR& v1, const FXMVECTOR& v2)
+{
+	XMVECTOR vectorSub = XMVectorSubtract(v1, v2);
+	XMVECTOR length = XMVector3Length(vectorSub);
+
+	float distance = 0.0f;
+	XMStoreFloat(&distance, length);
+	return distance;
+}

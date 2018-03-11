@@ -20,7 +20,6 @@
 
 Texture2D    gDiffuseMap : register(t0);
 
-
 SamplerState gsamPointWrap        : register(s0);
 SamplerState gsamPointClamp       : register(s1);
 SamplerState gsamLinearWrap       : register(s2);
@@ -112,7 +111,7 @@ float4 PS(VertexOut pin) : SV_Target
     pin.NormalW = normalize(pin.NormalW);
 
     // Vector from point being lit to eye. 
-    float3 toEyeW = normalize(gEyePosW - pin.PosW);
+   float3 toEyeW = normalize(gEyePosW - pin.PosW); 
 
     // Light terms.
     float4 ambient = gAmbientLight*diffuseAlbedo;
