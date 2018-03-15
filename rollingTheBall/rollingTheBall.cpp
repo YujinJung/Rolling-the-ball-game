@@ -137,6 +137,7 @@ private:
 	void BuildFrameResources();
 	void UpdateObjectShadows();
 	void BuildRenderItems();
+	void BuildObjectShadows();
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
 
@@ -261,7 +262,7 @@ bool rollingTheBall::Initialize()
 	BuildShapeGeometry();
 	BuildMaterials();
 	BuildRenderItems();
-	UpdateObjectShadows();
+	BuildObjectShadows();
 	BuildFrameResources();
 	BuildDescriptorHeaps();
 	BuildTextureBufferViews();
@@ -539,15 +540,15 @@ void rollingTheBall::OnKeyboardInput(const GameTimer& gt)
 	mPlayer.setTarget(mPlayerTarget);
 	mPlayer.setYaw(mPlayerYaw);
 	mPlayer.setVelocity(mPlayerVelocity);
-	
-	if (pushKey == true)
-	{
-		UpdatePlayerPosition(gt);
-	}
 	if (restart == true)
 	{
 		UpdateObjectShadows();
 	}
+	if (pushKey == true)
+	{
+		UpdatePlayerPosition(gt);
+	}
+	
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------
@@ -730,11 +731,11 @@ void rollingTheBall::UpdateObjectCBs(const GameTimer& gt)
 
 	for (auto& e : mRitems[(int)RenderLayer::Shadow])
 	{
-		XMMATRIX world = XMLoadFloat4x4(&e->World);
-		XMMATRIX texTransform = XMLoadFloat4x4(&e->TexTransform);
-
 		if (e->NumFramesDirty > 0)
 		{
+			XMMATRIX world = XMLoadFloat4x4(&e->World);
+			XMMATRIX texTransform = XMLoadFloat4x4(&e->TexTransform);
+
 			ObjectConstants objConstants;
 			XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
 			XMStoreFloat4x4(&objConstants.TexTransform, XMMatrixTranspose(texTransform));
@@ -749,20 +750,23 @@ void rollingTheBall::UpdateObjectCBs(const GameTimer& gt)
 
 void rollingTheBall::UpdateObjectShadows()
 {
-	for (auto& e : mRitems[(int)RenderLayer::Shadow])
+	// for (auto& e : mRitems[(int)RenderLayer::Shadow])
+	// 3 means Player, player shadow, grid 
+	for (int i = mTargetIndexOffset - 3; i < mTargetIndexEndOffset - 3; ++i)
 	{
-		XMMATRIX world = XMLoadFloat4x4(&e->World);
+		auto& e = mRitems[(int)RenderLayer::Shadow][i];
+		
+		// Load the object world
+		auto& o = mRitems[(int)RenderLayer::Opaque][i + 1];
+		XMMATRIX shadowWorld = XMLoadFloat4x4(&o->World);
 
-		// objIndex - mTargetIndexEndOffset >= mTargetIndexOffset - 2
-		// objIndex - mTargetIndexEndOffset < mTargetIndexEndOffset - 2
-		if(e->ObjCBIndex >= mTargetIndexOffset + mTargetIndexEndOffset - 2 && e->ObjCBIndex < 2*mTargetIndexEndOffset - 2)
-			world *= XMMatrixTranslation(mTargetPos.x, 0.0f, 0.0f);
+		shadowWorld *= XMMatrixTranslation(mTargetPos.x, 0.0f, 0.0f);
 
 		XMVECTOR shadowPlane = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 		XMVECTOR toMainLight = -XMLoadFloat3(&mMainLight.Direction);
 		XMMATRIX S = XMMatrixShadow(shadowPlane, toMainLight);
 		XMMATRIX shadowOffsetY = XMMatrixTranslation(0.0f, 0.001f, 0.0f);
-		XMStoreFloat4x4(&e->World, world * S * shadowOffsetY);
+		XMStoreFloat4x4(&e->World, shadowWorld * S * shadowOffsetY);
 		e->NumFramesDirty = gNumFrameResources;
 	}
 }
@@ -1552,7 +1556,9 @@ void rollingTheBall::BuildRenderItems()
 		auto& e = mAllRitems.at(i);
 		mRitems[(int)RenderLayer::Opaque].push_back(e.get());
 
+		// Skip the Grid shadow
 		if (i == 0) continue;
+
 		auto shadowedObjectRitem = std::make_unique<RenderItem>();
 		*shadowedObjectRitem = *e;
 		shadowedObjectRitem->ObjCBIndex = objCBIndex++;
@@ -1591,6 +1597,20 @@ void rollingTheBall::BuildRenderItems()
 	mAllRitems.push_back(std::move(shadowedPlayerRitem));
 }
 
+void rollingTheBall::BuildObjectShadows()
+{
+	for (auto& e : mRitems[(int)RenderLayer::Shadow])
+	{
+		XMMATRIX world = XMLoadFloat4x4(&e->World);
+
+		XMVECTOR shadowPlane = XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+		XMVECTOR toMainLight = -XMLoadFloat3(&mMainLight.Direction);
+		XMMATRIX S = XMMatrixShadow(shadowPlane, toMainLight);
+		XMMATRIX shadowOffsetY = XMMatrixTranslation(0.0f, 0.001f, 0.0f);
+		XMStoreFloat4x4(&e->World, world * S * shadowOffsetY);
+		e->NumFramesDirty = gNumFrameResources;
+	}
+}
 //-------------------------------------------------------------------------------------------------------------------------------
 void rollingTheBall::DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems)
 {
